@@ -242,7 +242,7 @@ function commerce_sermepa_redirect_form_validate($order, $payment_method) {
  * Handle the response of the payment transaction.
  */
 function _commerce_sermepa_response($response = NULL) {
-  if ((int)$response < 99) {
+  if ((int)$response <= 99) {
     return 'AUTHORIZED';
   }
   // TODO: Specify the error message by the docs.
