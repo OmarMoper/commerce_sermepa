@@ -212,8 +212,8 @@ function commerce_sermepa_order_form($form, &$form_state, $order, $settings) {
  */
 function commerce_sermepa_redirect_form_validate($order, $payment_method) {
   $response = $_GET;
-  $amount = commerce_currency_amount_to_integer($order->commerce_order_total[LANGUAGE_NONE][0]['amount'], $order->commerce_order_total[LANGUAGE_NONE][0]['currency_code']);
-  $message = $amount. $response['Ds_Order']. $response['Ds_MerchantCode']. $response['Ds_Currency']. $response['Ds_Response']. $payment_method['settings']['Ds_MerchantSignature'];
+
+  $message = $order->commerce_order_total[LANGUAGE_NONE][0]['amount']. $response['Ds_Order']. $response['Ds_MerchantCode']. $response['Ds_Currency']. $response['Ds_Response']. $payment_method['settings']['Ds_MerchantSignature'];
 
   if ($response['Ds_Signature'] != strtoupper(sha1($message))) {
     watchdog('commerce_sermepa', t('Signature for the payment doesn\'t match'), array(), WATCHDOG_ERROR);
