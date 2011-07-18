@@ -1,5 +1,7 @@
 <?php
-// $Id$
+
+DEFINE('COMMERCE_SERMEPA_URL_TEST', 'https://sis-t.sermepa.es:25443/sis/realizarPago');
+DEFINE('COMMERCE_SERMEPA_URL_LIVE', 'https://sis.sermepa.es/sis/realizarPago');
 
 /**
  * @file
@@ -37,13 +39,14 @@ function commerce_sermepa_settings_form($settings = NULL) {
     'Ds_MerchantSignature' => '',
     'Ds_Merchant_Terminal' => '001',
     'currency' => '978',
-    'url' => '',
+    'override_url' => '',
     'encryption' => 'sha1-enhanced',
   );
 
   $form['name'] = array(
     '#type' => 'textfield',
     '#title' => t('Bank Name'),
+    '#description' => t('Administrative name for the bank.'),
     '#default_value' => $settings['name'],
     '#size' => 80,
     '#maxlength' => 255,
@@ -54,7 +57,6 @@ function commerce_sermepa_settings_form($settings = NULL) {
     '#title' => t('Mode of the transactions'),
     '#default_value' => $settings['mode'],
     '#options' => array('test' => t('Test'), 'live' => t('Live')),
-    '#size' => 10,
     '#maxlength' => 5,
     '#required' => TRUE,
   );
@@ -101,15 +103,22 @@ function commerce_sermepa_settings_form($settings = NULL) {
     ),
     '#required' => TRUE,
   );
-  $form['url'] = array(
+
+  $form['advanced'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Advanced options'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+
+  $form['advanced']['override_url'] = array(
     '#type' => 'textfield',
-    '#title' => t('Bank connect url'),
-    '#default_value' => $settings['url'],
+    '#title' => t('Override bank connect url'),
+    '#default_value' => $settings['override_url'],
     '#size' => 80,
     '#maxlength' => 255,
-    '#required' => TRUE,
   );
-  $form['encryption'] = array(
+  $form['advanced']['encryption'] = array(
     '#type' => 'radios',
     '#title' => t('Method of encryption'),
     '#default_value' => $settings['encryption'],
@@ -158,19 +167,30 @@ function commerce_sermepa_redirect_form($form, &$form_state, $order, $payment_me
  *   The fully loaded order being paid for.
  */
 function commerce_sermepa_order_form($form, &$form_state, $order, $settings) {
-  $merchant_order = '0000' . $order->order_id;
+  $merchant_order =  '000000' . $order->order_id;
   $transactiontype = '0';
 
-  if ($settings['encryption'] == 'sha1-enhanced') {
+  if ($settings['advanced']['encryption'] == 'sha1-enhanced') {
     $message = $order->commerce_order_total[LANGUAGE_NONE][0]['amount'] . $merchant_order . $settings['Ds_MerchantCode'] . $settings['currency'] . $transactiontype . $settings['merchant_url'] . $settings['Ds_MerchantSignature'];
     $signature = strtoupper(sha1($message));
   }
-  elseif($settings['encryption'] == 'sha1') {
+  elseif($settings['advanced']['encryption'] == 'sha1') {
     module_load_include('inc', 'commerce_sermepa', 'sha1');
     $sha = new SHA1;
     $message = $order->commerce_order_total[LANGUAGE_NONE][0]['amount'] . $merchant_order . $settings['Ds_MerchantCode'] . $settings['currency'] . $settings['Ds_MerchantSignature'];
     $digest1 = $sha->hash_string($message);
     $signature = strtoupper($sha->hash_to_string($digest1));
+  }
+
+  // Get the url to connect to.
+  if (!empty($settings['advanced']['override_url'])) {
+    $url = $settings['override_url'];
+  }
+  elseif ($settings['mode'] == 'live') {
+    $url = COMMERCE_SERMEPA_URL_LIVE;
+  }
+  else {
+    $url = COMMERCE_SERMEPA_URL_TEST;
   }
 
   $hidden_fields = array(
@@ -189,7 +209,7 @@ function commerce_sermepa_order_form($form, &$form_state, $order, $settings) {
   	'Ds_Merchant_Terminal' => $settings['Ds_Merchant_Terminal'],
   );
 
-  $form['#action'] = $settings['url'];
+  $form['#action'] = $url;
 
   // Create hidden fields.
   foreach ($hidden_fields as $name => $value) {
