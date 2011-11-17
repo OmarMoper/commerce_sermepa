@@ -167,7 +167,7 @@ function commerce_sermepa_redirect_form($form, &$form_state, $order, $payment_me
  *   The fully loaded order being paid for.
  */
 function commerce_sermepa_order_form($form, &$form_state, $order, $settings) {
-  $merchant_order =  '000000' . $order->order_id;
+  $merchant_order = substr(date('ymdHis') . '_' . $order->order_id, -12, 12);
   $transactiontype = '0';
 
   if ($settings['advanced']['encryption'] == 'sha1-enhanced') {
