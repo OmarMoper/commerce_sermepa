@@ -246,24 +246,29 @@ function commerce_sermepa_redirect_form_validate($order, $payment_method) {
 
   if ($response['Ds_Signature'] != strtoupper(sha1($message))) {
     watchdog('commerce_sermepa', t('Signature for the payment doesn\'t match'), array(), WATCHDOG_ERROR);
+    commerce_payment_redirect_pane_previous_page($order);
     return FALSE;
   }
 
   if (empty($response['Ds_AuthorisationCode'])) {
     watchdog('commerce_sermepa', t('No authorisation code for the transaction'), array(), WATCHDOG_ERROR);
+    commerce_payment_redirect_pane_previous_page($order);
     return FALSE;
   }
-
   // Handle the response of the bank.
   // TODO: Specify the errors returned by the payment gateway.
   $sermepa_response = _commerce_sermepa_response($response['Ds_Response']);
+
   if ($sermepa_response == 'ERROR') {
     watchdog('commerce_sermepa', t('Failure in the payment transaction'), array(), WATCHDOG_ERROR);
     commerce_sermepa_transaction($payment_method, $order, $response, COMMERCE_PAYMENT_STATUS_FAILURE);
+    commerce_payment_redirect_pane_previous_page($order);
+    return FALSE;
   }
 
   // Process the payment.
   commerce_sermepa_transaction($payment_method, $order, $response, COMMERCE_PAYMENT_STATUS_SUCCESS);
+  commerce_payment_redirect_pane_next_page($order);
   return TRUE;
 }
 
@@ -309,7 +314,7 @@ function commerce_sermepa_submit_form($payment_method, $pane_values, $checkout_p
     $form = array();
     $form['sermepa_description'] = array(
       '#type' => 'item',
-      '#title' => t('Commerce Serpema payment description'),
+      '#title' => t('Payment instructions'),
       '#markup' => '<p class="sermepa-description">' . $payment_method['settings']['description'] . '</p>'
     );
     return $form;
