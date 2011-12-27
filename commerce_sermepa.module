@@ -21,6 +21,7 @@ function commerce_sermepa_commerce_payment_method_info() {
     'description' => t('Sermepa payment gateway integration'),
     'terminal' => FALSE,
     'offsite' => TRUE,
+    'offsite_autoredirect' => TRUE,
   );
 
   return $payment_methods;
