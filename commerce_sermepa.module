@@ -22,6 +22,7 @@ function commerce_sermepa_commerce_payment_method_info() {
     'terminal' => FALSE,
     'offsite' => TRUE,
     'offsite_autoredirect' => TRUE,
+    'active' => TRUE,
   );
 
   return $payment_methods;
