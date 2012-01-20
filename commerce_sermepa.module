@@ -125,14 +125,14 @@ function commerce_sermepa_settings_form($settings = NULL) {
   $form['advanced']['override_url'] = array(
     '#type' => 'textfield',
     '#title' => t('Override bank connect url'),
-    '#default_value' => $settings['override_url'],
+    '#default_value' => $settings['advanced']['override_url'],
     '#size' => 80,
     '#maxlength' => 255,
   );
   $form['advanced']['encryption'] = array(
     '#type' => 'radios',
     '#title' => t('Method of encryption'),
-    '#default_value' => $settings['encryption'],
+    '#default_value' => $settings['advanced']['encryption'],
     '#options' => array(
       'sha1' => t('SHA'),
       'sha1-enhanced' => t('Enhanced SHA'),
