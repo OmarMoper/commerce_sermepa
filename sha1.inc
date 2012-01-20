@@ -136,6 +136,7 @@ class SHA1 {
         }
 
         function hash_to_string( $hash ) {
+                $astr = '';
                 $len = sizeof( $hash );
                 for ($i=0; $i<$len; ++$i) {
                         $astr .= $this->wordstr( $hash[$i] );
