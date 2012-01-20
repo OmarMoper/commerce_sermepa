@@ -41,8 +41,10 @@ function commerce_sermepa_settings_form($settings = NULL) {
     'Ds_MerchantSignature' => '',
     'Ds_Merchant_Terminal' => '001',
     'currency' => '978',
-    'override_url' => '',
-    'encryption' => 'sha1-enhanced',
+    'advanced' => array(
+      'override_url' => '',
+      'encryption' => 'sha1-enhanced',
+    ),
   );
 
   $form['name'] = array(
