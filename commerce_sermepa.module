@@ -102,8 +102,20 @@ function commerce_sermepa_settings_form($settings = NULL) {
     '#default_value' => $settings['currency'],
     '#options' => array(
       '978' => t('Euro'),
-      '840' => t('Dollar'),
+      '840' => t('U.S. Dollar'),
       '826' => t('Pound'),
+      '392' => t('Yen'),
+       '32' => t('Southern Argentina'),
+      '124' => t('Canadian Dollar'),
+      '152' => t('Chilean Peso'),
+      '170' => t('Colombian Peso'),
+      '356' => t('India Rupee'),
+      '484' => t('New Mexican Peso'),
+      '604' => t('Soles'),
+      '756' => t('Swiss Franc'),
+      '986' => t('Brazilian Real'),
+      '937' => t('Bolivar'),
+      '949' => t('Turkish lira')
     ),
     '#required' => TRUE,
   );
