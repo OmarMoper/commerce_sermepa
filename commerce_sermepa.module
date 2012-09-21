@@ -1,12 +1,47 @@
 <?php
+/**
+ * @file
+ * Provides a payment method for Drupal Commerce using Sermepa gateway.
+ */
 
 DEFINE('COMMERCE_SERMEPA_URL_TEST', 'https://sis-t.sermepa.es:25443/sis/realizarPago');
 DEFINE('COMMERCE_SERMEPA_URL_LIVE', 'https://sis.sermepa.es/sis/realizarPago');
 
 /**
- * @file
- * Provides a payment method for Drupal Commerce using Sermepa gateway.
+ * Implements hook_menu().
  */
+function commerce_sermepa_menu() {
+  $items['sermepa/callback'] = array(
+    'page callback' => 'commerce_sermepa_callback',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Get POST response from sermepa.
+ */
+function commerce_sermepa_callback() {
+  // Load order and payment_method objects
+  if ($feedback = commerce_sermepa_get_feedback()) {
+    $order_id = explode("_", $feedback['Ds_Order']);
+    $order = commerce_order_load($order_id[1]);
+    if ($order) {
+      // Load the payment method, since it won't be available if no $order object was passed in as argument
+      $payment_method = commerce_payment_method_instance_load($order->data['payment_method']);
+      if (!$payment_method || $payment_method['method_id'] != 'commerce_sermepa') {
+        return FALSE;
+      }
+      if (commerce_sermepa_valid_sha1($order, $payment_method, $feedback)) {
+        commerce_sermepa_process_transaction($order, $payment_method, $feedback);
+      }
+    }
+  }
+
+  return FALSE;
+}
 
 /**
  * Implements hook_commerce_payment_method_info().
@@ -33,6 +68,7 @@ function commerce_sermepa_commerce_payment_method_info() {
  */
 function commerce_sermepa_settings_form($settings = NULL) {
   $form = array();
+
   $settings = (array) $settings + array(
     'name' => '',
     'mode' => 'test',
@@ -97,7 +133,7 @@ function commerce_sermepa_settings_form($settings = NULL) {
     '#required' => TRUE,
   );
   $form['currency'] = array(
-    '#type' => 'radios',
+    '#type' => 'select',
     '#title' => t('Currency'),
     '#default_value' => $settings['currency'],
     '#options' => array(
@@ -119,7 +155,6 @@ function commerce_sermepa_settings_form($settings = NULL) {
     ),
     '#required' => TRUE,
   );
-
   $form['description'] = array(
     '#type' => 'textarea',
     '#title' => t('Payment instructions'),
@@ -128,14 +163,12 @@ function commerce_sermepa_settings_form($settings = NULL) {
     '#required' => FALSE,
     '#rows' => 3,
   );
-
   $form['advanced'] = array(
     '#type' => 'fieldset',
     '#title' => t('Advanced options'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
   );
-
   $form['advanced']['override_url'] = array(
     '#type' => 'textfield',
     '#title' => t('Override bank connect url'),
@@ -153,6 +186,7 @@ function commerce_sermepa_settings_form($settings = NULL) {
     ),
     '#required' => TRUE,
   );
+
   return $form;
 }
 
@@ -176,8 +210,8 @@ function commerce_sermepa_redirect_form($form, &$form_state, $order, $payment_me
     'cancel_return' => url('checkout/' . $order->order_id . '/payment/back/' . $order->data['payment_redirect_key'], array('absolute' => TRUE)),
     // Return to the payment redirect page for processing successful payments
     'return' => url('checkout/' . $order->order_id . '/payment/return/' . $order->data['payment_redirect_key'], array('absolute' => TRUE)),
-    // Url of the store.
-    'merchant_url' => url('<front>', array('absolute' => TRUE)),
+    // Url to get POST result of payment.
+    'merchant_url' => url('sermepa/callback', array('absolute' => TRUE)),
     // Specify the current payment method instance ID in the notify_url
     'payment_method' => $payment_method['instance_id'],
   );
@@ -256,36 +290,63 @@ function commerce_sermepa_order_form($form, &$form_state, $order, $settings) {
  * Implements hook_redirect_form_validate.
  */
 function commerce_sermepa_redirect_form_validate($order, $payment_method) {
-  $response = $_GET;
+  commerce_sermepa_process_callback($order, $payment_method);
+}
 
-  $message = $order->commerce_order_total[LANGUAGE_NONE][0]['amount'] . $response['Ds_Order'] . $response['Ds_MerchantCode'] . $response['Ds_Currency'] . $response['Ds_Response'] . $payment_method['settings']['Ds_MerchantSignature'];
+/**
+ * Gets the Sermepa feedback from GET / POST parameters.
+ *
+ * @return
+ *   An associative array containing the Sermepa feedback taken from the $_GET and
+ *   $_POST superglobals, excluding 'q'.
+ *   Returns FALSE if the Ds_Order parameter is missing (indicating missing or
+ *   invalid Ogone feedback).
+ */
+function commerce_sermepa_get_feedback() {
+  $feedback = FALSE;
+  if (isset($_REQUEST['Ds_Order'])) {
+    // Prepare the feedback values sent by Sermepa for processing. We don't use
+    // $_REQUEST since this includes the $_SESSION variables.
+    $feedback = $_GET + $_POST;
+    unset($feedback['q']);
+  }
+  return $feedback;
+}
 
-  if ($response['Ds_Signature'] != strtoupper(sha1($message))) {
+/**
+ * Check if SHA1 in callback feedback is valid
+ */
+function commerce_sermepa_valid_sha1($order, $payment_method, $feedback) {
+  $order_id = explode("_", $feedback['Ds_Order']);
+  $order = commerce_order_load($order_id[1]);
+
+  $message = $order->commerce_order_total[LANGUAGE_NONE][0]['amount'] . $feedback['Ds_Order'] . $feedback['Ds_MerchantCode'] . $feedback['Ds_Currency'] . $feedback['Ds_Response'] . $payment_method['settings']['Ds_MerchantSignature'];
+
+  if ($feedback['Ds_Signature'] != strtoupper(sha1($message))) {
     watchdog('commerce_sermepa', t('Signature for the payment doesn\'t match'), array(), WATCHDOG_ERROR);
-    commerce_payment_redirect_pane_previous_page($order);
     return FALSE;
   }
 
-  if (empty($response['Ds_AuthorisationCode'])) {
+  if (empty($feedback['Ds_AuthorisationCode'])) {
     watchdog('commerce_sermepa', t('No authorisation code for the transaction'), array(), WATCHDOG_ERROR);
-    commerce_payment_redirect_pane_previous_page($order);
-    return FALSE;
-  }
-  // Handle the response of the bank.
-  // TODO: Specify the errors returned by the payment gateway.
-  $sermepa_response = _commerce_sermepa_response($response['Ds_Response']);
-
-  if ($sermepa_response == 'ERROR') {
-    watchdog('commerce_sermepa', t('Failure in the payment transaction'), array(), WATCHDOG_ERROR);
-    commerce_sermepa_transaction($payment_method, $order, $response, COMMERCE_PAYMENT_STATUS_FAILURE);
-    commerce_payment_redirect_pane_previous_page($order);
     return FALSE;
   }
 
-  // Process the payment.
-  commerce_sermepa_transaction($payment_method, $order, $response, COMMERCE_PAYMENT_STATUS_SUCCESS);
-  commerce_payment_redirect_pane_next_page($order);
   return TRUE;
+}
+
+/**
+ * Process callback information from Sermepa
+ * This can either be through a redirect after payment, or a Direct HTTP server-to-server request
+ */
+function commerce_sermepa_process_callback($order, $payment_method) {
+  if ($feedback = commerce_sermepa_get_feedback()) {
+    if (commerce_sermepa_valid_sha1($order, $payment_method, $feedback)) {
+      // Process the transaction based on the Sermepa parameters received
+      commerce_sermepa_process_transaction($order, $payment_method, $feedback);
+      return TRUE;
+    }
+  }
 }
 
 /**
@@ -293,33 +354,80 @@ function commerce_sermepa_redirect_form_validate($order, $payment_method) {
  */
 function _commerce_sermepa_response($response = NULL) {
   if ((int) $response <= 99) {
-    return 'AUTHORIZED';
+    $st = COMMERCE_PAYMENT_STATUS_SUCCESS;
+    $msg = t('Authorized');
   }
-  // TODO: Specify the error message by the docs.
-  return 'ERROR';
+  else {
+    $st = COMMERCE_PAYMENT_STATUS_FAILURE;
+    // TODO: Specify the error message by the docs.
+    $msg = 'ERROR';
+  }
+
+  return array(
+      'code' => $st,
+      'message' => $msg,
+  );
+}
+
+/**
+ * Get transaction with a specific Sermepa Ds_AuthorisationCode.
+ */
+function commerce_sermepa_get_payment_transaction($feedback) {
+  $feedback_remote_id = $feedback['Ds_AuthorisationCode'];
+
+  $query = new EntityFieldQuery;
+
+  $result = $query->entityCondition('entity_type', 'commerce_payment_transaction')
+                  ->propertyCondition('payment_method', 'sermepa')
+                  ->propertyCondition('remote_id', $feedback_remote_id)
+                  ->execute();
+
+  if (!empty($result['commerce_payment_transaction']) && count($result['commerce_payment_transaction']) > 0) {
+    $transaction = array_pop($result['commerce_payment_transaction']);
+    return $transaction->transaction_id;
+  }
+
+  return FALSE;
 }
 
 /**
  * Save the payment transaction for the order.
  */
-function commerce_sermepa_transaction($payment_method, $order, $response, $transaction_status) {
-  $transaction = commerce_payment_transaction_new('commerce_sermepa', $order->order_id);
+function commerce_sermepa_process_transaction($order, $payment_method, $feedback, $redirect = TRUE) {
+  $transaction_id = commerce_sermepa_get_payment_transaction($feedback);
+  if (!$transaction_id) {
+    $transaction = commerce_payment_transaction_new('sermepa', $order->order_id);
+  }
+  else {
+    $transaction = commerce_payment_transaction_load($transaction_id);
+  }
+  // Handle the response of the bank.
+  $transaction_status = _commerce_sermepa_response($feedback['Ds_Response']);
+
   $transaction->instance_id = $payment_method['instance_id'];
   $transaction->amount = $order->commerce_order_total[LANGUAGE_NONE][0]['amount'];
   $transaction->currency_code = $order->commerce_order_total[LANGUAGE_NONE][0]['currency_code'];
-  $transaction->remote_id = $response['Ds_AuthorisationCode'];
+  $transaction->remote_id = $feedback['Ds_AuthorisationCode'];
 
-  $transaction->status = $transaction_status;
-  if ($transaction_status == COMMERCE_PAYMENT_STATUS_SUCCESS) {
+  $transaction->status = $transaction_status['code'];
+  if ($transaction_status['code'] == COMMERCE_PAYMENT_STATUS_SUCCESS) {
     $transaction->message = 'Transaction accepted with id @transaction_id';
   }
-  elseif ($transaction_status == COMMERCE_PAYMENT_STATUS_FAILURE) {
-    $transaction->message = 'Error for the transaction with id @transaction_id';
+  elseif ($transaction_status['code'] == COMMERCE_PAYMENT_STATUS_FAILURE) {
+    $transaction->message = 'Error for the transaction with id @transaction_id: ' . $payment_status['message'];
   }
   $transaction->message_variables = array(
-    '@transaction_id' => $response['Ds_AuthorisationCode'],
+    '@transaction_id' => $feedback['Ds_AuthorisationCode'],
   );
   commerce_payment_transaction_save($transaction);
+  if ($redirect) {
+    if ($transaction_status['code'] == COMMERCE_PAYMENT_STATUS_FAILURE) {
+      commerce_payment_redirect_pane_previous_page($order);
+    }
+    else {
+      commerce_payment_redirect_pane_next_page($order);
+    }
+  }
 }
 
 /**
