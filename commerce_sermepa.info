@@ -1,10 +1,8 @@
-; $Id$
 name = Commerce Sermepa Payment Method
 description = Provides a payment method using Sermepa platform.
 package = Commerce - Payment
-dependencies[] = commerce
-dependencies[] = commerce_payment
 core = 7.x
 
-; Base module files
-files[] = comerce_sermepa.module
+; Dependencies
+dependencies[] = commerce
+dependencies[] = commerce_payment
