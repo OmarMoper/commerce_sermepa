@@ -429,7 +429,7 @@ function commerce_sermepa_get_payment_transaction($feedback) {
 function commerce_sermepa_process_transaction($order, $payment_method, $feedback, $redirect = TRUE) {
   $transaction_id = commerce_sermepa_get_payment_transaction($feedback);
   if (!$transaction_id) {
-    $transaction = commerce_payment_transaction_new('sermepa', $order->order_id);
+    $transaction = commerce_payment_transaction_new('commerce_sermepa', $order->order_id);
   }
   else {
     $transaction = commerce_payment_transaction_load($transaction_id);
