@@ -447,7 +447,7 @@ function commerce_sermepa_process_transaction($order, $payment_method, $feedback
     $transaction->message = 'Transaction accepted with id @transaction_id';
   }
   elseif ($transaction_status['code'] == COMMERCE_PAYMENT_STATUS_FAILURE) {
-    $transaction->message = 'Error for the transaction with id @transaction_id: ' . $payment_status['message'];
+    $transaction->message = 'Error for the transaction with id @transaction_id: ' . $transaction_status['message'];
   }
   $transaction->message_variables = array(
     '@transaction_id' => $feedback['Ds_AuthorisationCode'],
