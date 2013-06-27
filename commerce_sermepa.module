@@ -363,36 +363,51 @@ function _commerce_sermepa_response($response = NULL) {
     switch ((int) $response) {
       case 900:
         $msg = t('Transaction authorized for returns and confirmations');
+        break;
       case 101:
         $msg = t('Expired card');
+        break;
       case 102:
         $msg = t('Temporary exception card or on suspicion of fraud');
+        break;
       case 104:
       case 9104:
         $msg = t('Operation not allowed for the card or terminal');
+        break;
       case 116:
         $msg = t('Asset insufficient');
+        break;
       case 118:
         $msg = t('Card not registered');
+        break;
       case 129:
         $msg = t('Wrong security code (CVV2/CVC2)');
+        break;
       case 180:
         $msg = t('Card out of the service');
+        break;
       case 184:
         $msg = t('Error on owner authentication');
+        break;
       case 190:
         $msg = t('Denied without specific reasons');
+        break;
       case 191:
         $msg = t('Wrong expiration date');
+        break;
       case 202:
         $msg = t('Temporary or emergency card on suspicion of withdrawal card fraud');
+        break;
       case 912:
       case 9912:
         $msg = t('Issuer not available');
+        break;
       case 913:
         $msg = t('Order duplicated');
+        break;
       default:
         $msg = t('Transaction refused');
+        break;
     }
   }
 
