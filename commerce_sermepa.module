@@ -426,7 +426,7 @@ function commerce_sermepa_get_payment_transaction($feedback) {
   $query = new EntityFieldQuery;
 
   $result = $query->entityCondition('entity_type', 'commerce_payment_transaction')
-                  ->propertyCondition('payment_method', 'sermepa')
+                  ->propertyCondition('payment_method', 'commerce_sermepa')
                   ->propertyCondition('remote_id', $feedback_remote_id)
                   ->execute();
 
