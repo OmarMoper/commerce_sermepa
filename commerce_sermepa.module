@@ -300,7 +300,7 @@ function commerce_sermepa_redirect_form_validate($order, $payment_method) {
  *   An associative array containing the Sermepa feedback taken from the $_GET and
  *   $_POST superglobals, excluding 'q'.
  *   Returns FALSE if the Ds_Order parameter is missing (indicating missing or
- *   invalid Ogone feedback).
+ *   invalid Sermepa feedback).
  */
 function commerce_sermepa_get_feedback() {
   $feedback = FALSE;
