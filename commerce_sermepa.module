@@ -4,8 +4,8 @@
  * Provides a payment method for Drupal Commerce using Sermepa gateway.
  */
 
-DEFINE('COMMERCE_SERMEPA_URL_TEST', 'https://sis-t.sermepa.es:25443/sis/realizarPago');
-DEFINE('COMMERCE_SERMEPA_URL_LIVE', 'https://sis.sermepa.es/sis/realizarPago');
+DEFINE('COMMERCE_SERMEPA_URL_TEST', 'https://sis-t.redsys.es:25443/sis/realizarPago');
+DEFINE('COMMERCE_SERMEPA_URL_LIVE', 'https://sis.redsys.es/sis/realizarPago');
 
 /**
  * Implements hook_menu().
