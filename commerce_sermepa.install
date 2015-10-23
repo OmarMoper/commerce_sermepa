@@ -23,7 +23,7 @@ function commerce_sermepa_update_7101() {
   // Update Ds_MerchantName value and save it.
   $rule_config = rules_config_load('commerce_payment_commerce_sermepa');
   foreach ($rule_config->actions() as $action) {
-    if ($action->settings['payment_method']['method_id'] == 'method_id') {
+    if ($action->settings['payment_method']['method_id'] == 'commerce_sermepa') {
       $action->settings['payment_method']['settings']['Ds_MerchantName'] = $action->settings['payment_method']['settings']['Ds_Merchant_Titular'];
       unset($action->settings['payment_method']['settings']['Ds_Merchant_Titular']);
     }
