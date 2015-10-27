@@ -263,7 +263,7 @@ function commerce_sermepa_order_form($form, &$form_state, $order, $settings) {
     'Ds_Merchant_UrlKO' => $settings['cancel_return'],
     'Ds_Merchant_ConsumerLanguage' => 1,
     'Ds_Merchant_TransactionType' => $transactiontype,
-    'Ds_Merchant_MerchantData' => serialize(array('order_id' => $oder_id)),
+    'Ds_Merchant_MerchantData' => $order->order_id,
     'Ds_Merchant_MerchantSignature' => $signature,
     'Ds_Merchant_Terminal' => $settings['Ds_Merchant_Terminal'],
   );
@@ -317,9 +317,10 @@ function commerce_sermepa_get_feedback() {
  * Check if SHA1 in callback feedback is valid
  */
 function commerce_sermepa_valid_sha1($order, $payment_method, $feedback) {
-  $merchant_data = unserialize($feedback['Ds_MerchantData']);
-  $order_id = $merchant_data['order_id'];
-  $order = commerce_order_load($order_id);
+  $order_id = $feedback['Ds_MerchantData'];
+  if (!$order = commerce_order_load($order_id)) {
+    return FALSE;
+  }
 
   $message = $order->commerce_order_total[LANGUAGE_NONE][0]['amount'] . $feedback['Ds_Order'] . $feedback['Ds_MerchantCode'] . $feedback['Ds_Currency'] . $feedback['Ds_Response'] . $payment_method['settings']['Ds_MerchantSignature'];
 
