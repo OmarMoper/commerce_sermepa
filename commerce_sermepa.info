@@ -1,8 +1,12 @@
-name = Commerce Sermepa Payment Method
-description = Provides a payment method using Sermepa platform.
+name = Commerce Sermepa/Redsys Payment Method
+description = Provides a payment method using Sermepa/Redsys platform.
 package = Commerce - Payment
 core = 7.x
+php = 5.3
+configure = admin/commerce/config/payment-methods
 
 ; Dependencies
 dependencies[] = commerce
 dependencies[] = commerce_payment
+dependencies[] = libraries
+
