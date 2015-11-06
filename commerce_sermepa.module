@@ -523,6 +523,7 @@ function commerce_sermepa_process_transaction($order, $payment_method, $feedback
   $transaction->amount = $order->commerce_order_total[LANGUAGE_NONE][0]['amount'];
   $transaction->currency_code = $order->commerce_order_total[LANGUAGE_NONE][0]['currency_code'];
   $transaction->remote_id = $authorisation_code;
+  $transaction->remote_status = $feedback_parameters['Ds_Response'];
 
   $transaction->status = $transaction_status['code'];
   if ($transaction_status['code'] == COMMERCE_PAYMENT_STATUS_SUCCESS) {
