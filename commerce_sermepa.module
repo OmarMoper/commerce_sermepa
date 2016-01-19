@@ -87,34 +87,65 @@ function commerce_sermepa_library_initialize($settings) {
  * Implements hook_menu().
  */
 function commerce_sermepa_menu() {
-  $items['sermepa/callback/%commerce_order'] = array(
+  $items['sermepa/callback'] = array(
     'page callback' => 'commerce_sermepa_callback',
-    'page arguments' => array(2),
     'access callback' => TRUE,
     'type' => MENU_CALLBACK,
+  );
+
+  // Add a menu item for capturing authorizations.
+  $items['admin/commerce/orders/%commerce_order/payment/%commerce_payment_transaction/commerce-sermepa-complete'] = array(
+    'title' => 'Complete',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('commerce_sermepa_complete_form', 3, 5),
+    'access callback' => 'commerce_sermepa_complete_access',
+    'access arguments' => array(3, 5),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'context' => MENU_CONTEXT_INLINE,
+    'weight' => 2,
+    'file' => 'commerce_sermepa.admin.inc',
   );
 
   return $items;
 }
 
 /**
+ * Determines access to the prior authorization capture form or void form for
+ * sermepa credit card transactions.
+ *
+ * @param $order
+ *   The order the transaction is on.
+ * @param $transaction
+ *   The payment transaction object to be captured.
+ *
+ * @return
+ *   TRUE or FALSE indicating access.
+ */
+function commerce_sermepa_complete_access($order, $transaction) {
+  if ($transaction->payment_method != 'commerce_sermepa') {
+    return FALSE;
+  }
+
+  // Return FALSE if the transaction is not pending.
+  if ($transaction->status != COMMERCE_PAYMENT_STATUS_PENDING) {
+    return FALSE;
+  }
+
+  // Return FALSE if the transaction is actually a pending echeck.
+  if (empty($transaction->data['sermepa'])) {
+    return FALSE;
+  }
+
+  // Allow access if the user can update payments on this transaction.
+  return commerce_payment_transaction_access('update', $transaction);
+}
+
+/**
  * Get POST response from sermepa.
  */
-function commerce_sermepa_callback($order) {
-  if (!$order) {
-    watchdog('commerce_sermepa', "Bad '%order_id' order id received in feedback values.", array('%order_id' => arg(2)), WATCHDOG_WARNING);
-    return FALSE;
-  }
-
-  // Load the payment method.
-  $payment_method = commerce_payment_method_instance_load($order->data['payment_method']);
-  if (!$payment_method || $payment_method['method_id'] != 'commerce_sermepa') {
-    watchdog('commerce_sermepa', "Unknown or non-existent '%method_id' payment method.", array('%method_id' => 'commerce_sermepa'), WATCHDOG_WARNING);
-    return FALSE;
-  }
-
+function commerce_sermepa_callback() {
   // Create a sermepa instance.
-  if (!$gateway = commerce_sermepa_library_initialize($payment_method['settings'])) {
+  if (!$gateway = commerce_sermepa_library_initialize()) {
     return FALSE;
   }
 
@@ -142,6 +173,25 @@ function commerce_sermepa_callback($order) {
   commerce_sermepa_process_transaction($order, $payment_method, $parameters);
 
   return FALSE;
+}
+
+/**
+ * Helper function to load payment method settings.
+ *
+ * @return array
+ */
+function commerce_sermepa_get_payment_settings() {
+  $settings = array();
+
+  // Load payment method settings.
+  $rule_config = rules_config_load('commerce_payment_commerce_sermepa');
+  foreach ($rule_config->actions() as $action) {
+    if ($action->settings['payment_method']['method_id'] == 'commerce_sermepa') {
+      return $action->settings['payment_method']['settings'];
+    }
+  }
+
+  return $settings;
 }
 
 /**
@@ -252,6 +302,12 @@ function commerce_sermepa_settings_form($settings = NULL) {
     '#required' => FALSE,
     '#rows' => 3,
   );
+
+  $form['reference'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Reference payment',
+    '#default_value' => isset($settings['reference']) ? $settings['reference'] : NULL,
+  );
   $form['advanced'] = array(
     '#type' => 'fieldset',
     '#title' => t('Advanced options'),
@@ -361,8 +417,11 @@ function commerce_sermepa_order_form($form, &$form_state, $order, $settings) {
   // Store commerce order id in merchant data.
          ->setMerchantData($order->order_id);
 
-  // Allow user to make changes in the gateway configuration data.
-  rules_invoke_all('commerce_sermepa_gateway', $gateway, $order);
+  // Set merchant identifier recipient if reference payments are
+  // enabled.
+  if ($settings['reference']) {
+    $gateway->setMerchantIdentifier('REQUIRED');
+  }
 
   $form['#action'] = $gateway->getEnvironment();
 
@@ -499,8 +558,9 @@ function commerce_sermepa_get_payment_transaction($authorisation_code) {
  * @param boolean $redirect
  *   Specifies whether to call redirect functions or not.
  */
-function commerce_sermepa_process_transaction($order, $payment_method, $feedback_parameters, $redirect = TRUE) {
-  $authorisation_code = $feedback_parameters['Ds_AuthorisationCode'];
+function commerce_sermepa_process_transaction($order, $payment_method, $gateway, $redirect = TRUE) {
+  $settings = commerce_sermepa_get_payment_settings();
+  $authorisation_code = !$settings['reference'] ? $gateway->getFeedbackValue('Ds_AuthorisationCode') : $gateway->getFeedbackValue('Ds_Merchant_Identifier');
   $transaction_id = commerce_sermepa_get_payment_transaction($authorisation_code);
   if (!$transaction_id) {
     $transaction = commerce_payment_transaction_new('commerce_sermepa', $order->order_id);
@@ -510,13 +570,10 @@ function commerce_sermepa_process_transaction($order, $payment_method, $feedback
   }
 
   // Handle the response of the bank.
-  if (!class_exists('Sermepa')) {
-    libraries_load('sermepa');
-  }
-  $response_code = $feedback_parameters['Ds_Response'];
+  $response_code = $gateway->getFeedbackValue('Ds_Response');
   $transaction_status = array(
     'code' => (($response_code <= 99) ? COMMERCE_PAYMENT_STATUS_SUCCESS : COMMERCE_PAYMENT_STATUS_FAILURE),
-    'message' => Sermepa::handleResponse($response_code),
+    'message' => $gateway->handleResponse($response_code),
   );
 
   $transaction->instance_id = $payment_method['instance_id'];
@@ -526,8 +583,19 @@ function commerce_sermepa_process_transaction($order, $payment_method, $feedback
   $transaction->remote_status = $feedback_parameters['Ds_Response'];
 
   $transaction->status = $transaction_status['code'];
+  $transaction->data['sermepa']['method'] = $settings['reference'] ? 'reference' : 'payment';
   if ($transaction_status['code'] == COMMERCE_PAYMENT_STATUS_SUCCESS) {
     $transaction->message = 'Transaction accepted with id @transaction_id';
+
+    // If this is a reference transaction and is being created we change status
+    // to pending.
+    if ($settings['reference'] && empty($transaction->data['sermepa']['Ds_Merchant_Identifier'])) {
+      $transaction->data['sermepa'] += array(
+        'Ds_Merchant_Identifier' => $authorisation_code,
+        'Ds_Expiry_Date'         => $gateway->getFeedbackValue('Ds_ExpiryDate'),
+      );
+      $transaction->status = COMMERCE_PAYMENT_STATUS_PENDING;
+    }
   }
   elseif ($transaction_status['code'] == COMMERCE_PAYMENT_STATUS_FAILURE) {
     $transaction->message = 'Error for the transaction with id @transaction_id: ' . $transaction_status['message'];
@@ -574,4 +642,26 @@ function commerce_sermepa_submit_form($payment_method, $pane_values, $checkout_p
 
     return $form;
   }
+}
+
+/**
+ * Make a post request of a payment.
+ */
+function commerce_sermepa_payment_reference_complete_request(Sermepa $gateway, $settings) {
+  // Get the webservice to send payment request.
+  // Allow modules to alter gateway.
+  drupal_alter('commerce_sermepa_payment_request', $gateway, $settings);
+
+  $gateway->setEnvironment('test');
+  // Log the request.
+  watchdog('commerce_sermepa', 'Redsys request to @url: !param', array('@url' => $gateway->getWebServiceUrl('test'), '!param' => '<pre>' . check_plain(print_r($gateway->getParameters(), TRUE)) . '</pre>'), WATCHDOG_DEBUG);
+
+  // Webservice request.
+  $environment = $settings['mode'] == 'live' ? Sermepa::SERMEPA_URL_LIVE : Sermepa::SERMEPA_URL_TEST;
+  $webservice = $gateway->webservice($environment);
+  $xml = $gateway->composeReferencePaymentXML();
+  $data = $xml->saveHTML();
+
+  $response = $webservice->trataPeticion(array('datoEntrada' => $data));
+  return $response;
 }
